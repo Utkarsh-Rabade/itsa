@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="ITSA logo">
+  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#53e7ff"/><stop offset="1" stop-color="#1679ff"/></linearGradient></defs>
+  <rect x="3" y="3" width="114" height="114" rx="30" fill="#07111b" stroke="#16415b" stroke-width="2"/>
+  <path d="M27 28h66v11H27zm0 26h11v38H27zm22 0h44v10H49zm17 0h11v38H66z" fill="url(#g)"/>
+  <path d="M49 76h44v10H49z" fill="#53e7ff" opacity=".8"/>
+  <circle cx="92" cy="28" r="5" fill="#53e7ff"/>
+</svg>

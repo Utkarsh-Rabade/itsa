@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#02030a">
+  <meta name="description" content="ITSA — Information Technology Student Association, PCCOER, Pune. Build, learn, and lead.">
+  <meta property="og:image" content="/assets/itsa-logo-full.png">
+  <title>ITSA — PCCOER</title>
+  <link rel="icon" href="/assets/itsa-logo-mark.png" type="image/png">
+  <link rel="stylesheet" href="/css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/three@0.150.1/build/three.min.js" defer></script>
+  <script src="/js/webgl.js" defer></script>
+  <script src="/js/space-background.js" defer></script>
+  <script src="/js/main.js" defer></script>
+</head>
+<body>
+  <canvas id="starfield" aria-hidden="true"></canvas>
+  <div class="noise" aria-hidden="true"></div>
+  <header class="topbar" id="top">
+    <a class="brand" href="#home" aria-label="ITSA home">
+      <img src="/assets/itsa-logo-mark.png" alt="" class="brand-mark">
+      <span><strong>ITSA</strong><small>PCCOER · STUDENT ASSOCIATION</small></span>
+    </a>
+    <nav class="desktop-nav" aria-label="Main navigation">
+      <a href="#about">About</a><a href="#events">Events</a><a href="#gallery">Gallery</a><a href="#team">Team</a><a href="#sponsors">Sponsors</a>
+      <a class="nav-admin" href="/admin">Admin <span aria-hidden="true">↗</span></a>
+    </nav>
+    <button class="menu-toggle" id="menuToggle" aria-label="Open navigation" aria-expanded="false"><span></span><span></span></button>
+  </header>
+  <div class="mobile-nav" id="mobileNav" aria-hidden="true">
+    <a href="#about">About</a><a href="#events">Events</a><a href="#gallery">Gallery</a><a href="#team">Team</a><a href="#sponsors">Sponsors</a><a href="/admin">Admin login ↗</a>
+  </div>
+
+  <main>
+    <section class="hero hero-experience" id="home">
+      <canvas id="bg" aria-hidden="true"></canvas>
+      <div class="hero-gridline" aria-hidden="true"></div>
+      <div class="hero-experience-topline">
+        <span class="hero-location">PCCOER / RAVET / PUNE</span>
+        <span class="hero-counter" id="heroCounter">00</span>
+      </div>
+
+      <div class="hero-workbench">
+        <aside class="hero-left" aria-label="ITSA event previews">
+          <div class="hero-brand-line">
+            <span class="hero-brand-mark">IT</span>
+            <span><strong>ITSA / PCCOER</strong><small>INFORMATION TECHNOLOGY · STUDENT ASSOCIATION</small></span>
+          </div>
+          <div class="hero-filter-label">EXPLORE BY FORMAT</div>
+          <div class="hero-tags" id="heroFilters">
+            <button class="hero-chip active" data-hero-filter="All">ALL</button>
+            <button class="hero-chip" data-hero-filter="Hackathon">HACKATHON</button>
+            <button class="hero-chip" data-hero-filter="Workshop">WORKSHOP</button>
+            <button class="hero-chip" data-hero-filter="Seminar">SEMINAR</button>
+            <button class="hero-chip" data-hero-filter="Cultural">CULTURAL</button>
+            <button class="hero-chip" data-hero-filter="Sports">SPORTS</button>
+            <button class="hero-chip" data-hero-filter="AI / ML">AI / ML</button>
+            <button class="hero-chip" data-hero-filter="Web Dev">WEB DEV</button>
+          </div>
+          <div class="hero-project-list" id="heroProjectList">
+            <div class="hero-project-empty">Loading event previews…</div>
+          </div>
+          <a href="#events" class="hero-all-events">OPEN EVENT ARCHIVE <span>↗</span></a>
+        </aside>
+
+        <div class="hero-center-space" aria-hidden="true"></div>
+
+        <aside class="hero-right">
+          <div class="hero-info-block">
+            <h2>[ INFO ]</h2>
+            <p id="heroInfoText">Studies and events are published as they are built. Some content may be updated as the club grows.</p>
+          </div>
+          <div class="hero-info-block">
+            <h2>[ AIMS ]</h2>
+            <p id="heroAimsText">An open community for IT students at PCCOER to build, learn, and lead. From hackathons to industry talks, we create opportunities that matter.</p>
+          </div>
+          <div class="hero-info-block">
+            <h2>[ EXPLORING ]</h2>
+            <ul id="heroExploring"><li>Web &amp; App Development</li><li>AI / Machine Learning</li><li>Cybersecurity</li><li>Competitive Programming</li></ul>
+          </div>
+          <div class="hero-info-block hero-connect">
+            <h2>[ CONNECT ]</h2>
+            <a href="#about">ABOUT ITSA ↗</a>
+            <a href="#events">EVENTS ↗</a>
+            <a href="mailto:pccoer.itsa@gmail.com" id="heroEmail">MAIL → PCCOER.ITSA@GMAIL.COM</a>
+            <a href="https://instagram.com/itsa_pccoer" target="_blank" rel="noopener" id="heroInstagram">INSTAGRAM → @ITSA_PCCOER</a>
+            <a href="https://linkedin.com/company/itsa-pccoer" target="_blank" rel="noopener" id="heroLinkedin">LINKEDIN → ITSA PCCOER</a>
+          </div>
+        </aside>
+      </div>
+      <div class="hero-bottom hero-experience-bottom"><span>SCROLL TO EXPLORE</span><span class="scroll-line"></span><span>01 — 05</span></div>
+    </section>
+    <section class="intro-strip" aria-label="ITSA overview">
+      <span>ONE COMMUNITY</span><b>×</b><span>COUNTLESS POSSIBILITIES</span><b>×</b><span>BUILT AT PCCOER</span>
+    </section>
+
+    <section class="section about-section" id="about">
+      <div class="section-heading reveal"><div><p class="section-index">01 / ABOUT US</p><h2>Technology moves<br><span>when we do.</span></h2></div><p class="heading-side">A student-led space to<br>turn ideas into action.</p></div>
+      <div class="about-layout">
+        <div class="about-main reveal"><p id="aboutText">ITSA — the Information Technology Student Association — is the student community of the IT Department at Pimpri Chinchwad College of Engineering and Research, Pune. We connect classroom learning with real-world technology through hands-on experiences, peer learning, and industry interaction.</p><p id="aimsText">An open community for IT students at PCCOER to build, learn, and lead. From hackathons to industry talks, we create opportunities that turn curiosity into capability.</p><a href="#team" class="underlined-link">Meet the people behind it <span>↗</span></a></div>
+        <div class="stats-grid reveal">
+          <article class="stat-card"><strong data-stat="eventsHosted">12<span>+</span></strong><small>EVENTS HOSTED</small></article>
+          <article class="stat-card"><strong data-stat="studentsEngaged">300<span>+</span></strong><small>STUDENTS ENGAGED</small></article>
+          <article class="stat-card"><strong data-stat="yearsActive">5<span>+</span></strong><small>YEARS ACTIVE</small></article>
+          <article class="stat-card"><strong data-stat="industrySpeakers">20<span>+</span></strong><small>INDUSTRY SPEAKERS</small></article>
+        </div>
+      </div>
+      <div class="focus-row"><span class="focus-label">AREAS WE EXPLORE</span><div id="focusAreas" class="focus-list"><span>Web & App Development</span><span>AI / Machine Learning</span><span>Cybersecurity</span><span>Competitive Programming</span></div></div>
+    </section>
+
+    <section class="section events-section" id="events">
+      <div class="section-heading reveal"><div><p class="section-index">02 / WHAT'S HAPPENING</p><h2>Make something<br><span>happen.</span></h2></div><p class="heading-side">From first ideas to final demos.<br>There's always something going on.</p></div>
+      <div class="events-wrap">
+        <article class="featured-event reveal" id="featuredEvent"><div class="featured-image" id="featuredImage"><div class="featured-image-grid"></div><span class="featured-image-tag">ITSA / FEATURED</span><span class="featured-image-number">01</span></div><div class="featured-content"><div class="event-kicker"><span class="pulse-dot"></span><span id="featuredStatus">UPCOMING EVENT</span></div><p class="featured-category" id="featuredCategory">HACKATHON · 24 HRS</p><h3 id="featuredTitle">TechNova 2026</h3><p id="featuredDescription">ITSA's flagship technology festival. A place to create, compete, and connect.</p><div class="featured-meta"><span id="featuredDate">DATE TO BE ANNOUNCED</span><span id="featuredLocation">PCCOER, RAVET</span></div><a href="mailto:pccoer.itsa@gmail.com" class="button button-outline" id="featuredLink">Register interest <span>↗</span></a></div></article>
+        <div class="event-list-panel"><div class="event-list-head"><span>EVENT LOG</span><span id="eventCount">00 EVENTS</span></div><div class="event-filters" id="eventFilters"><button class="filter active" data-filter="All">All</button><button class="filter" data-filter="Hackathon">Hackathon</button><button class="filter" data-filter="Workshop">Workshop</button><button class="filter" data-filter="Seminar">Seminar</button><button class="filter" data-filter="Cultural">Cultural</button><button class="filter" data-filter="Sports">Sports</button><button class="filter" data-filter="AI / ML">AI / ML</button><button class="filter" data-filter="Web Dev">Web Dev</button></div><div class="event-list" id="eventList"><div class="empty-state">Loading events…</div></div></div>
+      </div>
+    </section>
+
+    <section class="section gallery-section" id="gallery">
+      <div class="section-heading reveal"><div><p class="section-index">03 / THE ARCHIVE</p><h2>Proof that<br><span>we were here.</span></h2></div><p class="heading-side">Good people. Big ideas.<br>Moments worth keeping.</p></div>
+      <div class="gallery-grid" id="galleryGrid"><div class="gallery-empty"><span class="empty-cross">+</span><p>THE NEXT MEMORY STARTS HERE.</p><small>Photos from ITSA events will appear here.</small></div></div>
+    </section>
+
+    <section class="section team-section" id="team">
+      <div class="section-heading reveal"><div><p class="section-index">04 / THE PEOPLE</p><h2>Made possible<br><span>by people.</span></h2></div><p class="heading-side">A team that builds the community<br>we all get to be part of.</p></div>
+      <div class="team-toolbar"><div class="team-tabs" id="teamTabs"><button class="team-tab active" data-team="All">Everyone</button><button class="team-tab" data-team="Core Committee">Core Committee</button><button class="team-tab" data-team="Technical">Technical</button><button class="team-tab" data-team="Events">Events</button><button class="team-tab" data-team="Creative">Creative</button></div><span id="teamCount">TEAM / 00</span></div>
+      <div class="team-grid" id="teamGrid"><div class="team-empty">The team directory is being updated.</div></div>
+    </section>
+
+    <section class="section sponsors-section" id="sponsors">
+      <div class="section-heading reveal"><div><p class="section-index">05 / OUR PARTNERS</p><h2>Good things<br><span>are built together.</span></h2></div><p class="heading-side">To the people and organisations<br>that back student ambition.</p></div>
+      <div id="sponsorGroups"><div class="sponsor-empty">Partner logos and details will appear here.</div></div>
+      <div class="sponsor-cta"><div><p class="section-index">LET'S WORK TOGETHER</p><h3>Put your brand<br>in the room.</h3></div><a class="button button-primary" id="sponsorContact" href="mailto:pccoer.itsa@gmail.com">Become a sponsor <span>↗</span></a></div>
+    </section>
+
+    <section class="contact-band"><p class="section-index">HAVE AN IDEA? A QUESTION? A COLLABORATION?</p><h2>Let's make<br><span>it happen.</span></h2><a href="mailto:pccoer.itsa@gmail.com" id="contactEmail">PCCOER.ITSA@GMAIL.COM <span>↗</span></a></section>
+  </main>
+
+  <footer class="footer"><div class="footer-top"><a class="brand" href="#home"><img src="/assets/itsa-logo-mark.png" alt="" class="brand-mark"><span><strong>ITSA</strong><small>PCCOER · STUDENT ASSOCIATION</small></span></a><p>Built with curiosity.<br>Powered by community.</p><div class="footer-social"><a id="footerInstagram" href="https://instagram.com/itsa_pccoer" target="_blank" rel="noopener">INSTAGRAM ↗</a><a id="footerLinkedin" href="https://linkedin.com/company/itsa-pccoer" target="_blank" rel="noopener">LINKEDIN ↗</a><a href="/admin">ADMIN ↗</a></div></div><div class="footer-bottom"><span>© <span id="year">2026</span> ITSA · PCCOER</span><a href="#top">BACK TO TOP ↑</a><span>DESIGNED FOR THE NEXT GENERATION</span></div></footer>
+  <div class="lightbox" id="lightbox" aria-hidden="true"><button id="lightboxClose" aria-label="Close image">×</button><img id="lightboxImage" alt=""><p id="lightboxCaption"></p></div>
+</body>
+</html>

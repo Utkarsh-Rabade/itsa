@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#02030a">
+  <title>ITSA Admin — PCCOER</title>
+  <link rel="icon" href="/assets/itsa-logo-mark.png" type="image/png">
+  <link rel="stylesheet" href="/admin/admin.css">
+  <script src="/js/space-background.js" defer></script>
+  <script src="/admin/admin.js" defer></script>
+</head>
+<body>
+  <canvas id="starfield" aria-hidden="true"></canvas>
+  <div class="auth-shell" id="authShell">
+    <a class="auth-brand" href="/"><img src="/assets/itsa-logo-mark.png" alt=""><span><b>ITSA</b><small>ADMIN CONSOLE / PCCOER</small></span></a>
+    <section class="auth-card" id="loginView">
+      <div class="auth-index">SECURE ACCESS / 01</div><h1>Welcome<br><span>back.</span></h1><p>Sign in to manage the ITSA public website.</p>
+      <form id="loginForm"><label>Email address<input type="email" name="email" autocomplete="username" required placeholder="admin@itsa.in"></label><label>Password<input type="password" name="password" autocomplete="current-password" required placeholder="Your admin password"></label><button class="btn btn-primary" type="submit">Sign in <span>↗</span></button><div class="form-message" id="loginMessage" role="status"></div></form>
+      <a class="auth-back" href="/">← Back to public website</a>
+    </section>
+    <section class="auth-card" id="setupView" hidden>
+      <div class="auth-index">FIRST-TIME SETUP / 01</div><h1>Create your<br><span>admin.</span></h1><p>This is a one-time setup. Find the setup key in the terminal where you started the website.</p>
+      <form id="setupForm"><label>One-time setup key<input type="text" name="setupKey" autocomplete="off" required placeholder="Paste the key from your terminal"></label><label>Admin email<input type="email" name="email" autocomplete="email" required placeholder="you@example.com"></label><label>Create password<input type="password" name="password" autocomplete="new-password" minlength="12" required placeholder="At least 12 characters"></label><button class="btn btn-primary" type="submit">Create admin account <span>↗</span></button><div class="form-message" id="setupMessage" role="status"></div></form>
+      <a class="auth-back" href="/">← Back to public website</a>
+    </section>
+  </div>
+
+  <div class="admin-shell" id="adminShell" hidden>
+    <aside class="sidebar" id="sidebar">
+      <a class="side-brand" href="/"><img src="/assets/itsa-logo-mark.png" alt=""><span><b>ITSA</b><small>ADMIN / PCCOER</small></span></a>
+      <div class="side-label">OVERVIEW</div><button class="side-link active" data-page="dashboard"><span>◈</span> Dashboard</button>
+      <div class="side-label">CONTENT</div><button class="side-link" data-page="events"><span>◷</span> Events <i id="navEvents">0</i></button><button class="side-link" data-page="gallery"><span>▧</span> Gallery <i id="navGallery">0</i></button><button class="side-link" data-page="team"><span>♙</span> Team <i id="navTeam">0</i></button><button class="side-link" data-page="sponsors"><span>◇</span> Sponsors <i id="navSponsors">0</i></button>
+      <div class="side-label">CONFIGURATION</div><button class="side-link" data-page="settings"><span>⚙</span> Site settings</button>
+      <div class="sidebar-bottom"><div class="signed-in"><span class="online-dot"></span><span id="signedInEmail">Admin</span></div><a href="/" target="_blank" rel="noopener" class="side-view">View live site ↗</a><button id="logoutBtn" class="side-logout">Sign out</button></div>
+    </aside>
+    <main class="admin-main">
+      <header class="admin-topbar"><button id="sidebarToggle" class="sidebar-toggle" aria-label="Toggle menu">☰</button><div><span class="top-kicker">ITSA / CONTENT MANAGEMENT</span><h1 id="pageTitle">Dashboard</h1></div><a href="/" target="_blank" rel="noopener" class="btn btn-quiet">View website ↗</a></header>
+      <section class="page active" id="page-dashboard">
+        <div class="welcome-row"><div><p class="eyebrow">YOUR CLUB, YOUR STORY</p><h2>Everything in<br><span>one place.</span></h2><p class="muted">Manage what students see on the ITSA website.</p></div><button class="btn btn-primary" id="quickAddEvent">+ New event</button></div>
+        <div class="metric-grid"><article class="metric"><span>TOTAL EVENTS</span><strong id="metricEvents">0</strong><small>Across all statuses</small></article><article class="metric"><span>GALLERY ITEMS</span><strong id="metricGallery">0</strong><small>Uploaded images</small></article><article class="metric"><span>TEAM MEMBERS</span><strong id="metricTeam">0</strong><small>People listed</small></article><article class="metric metric-highlight"><span>UPCOMING EVENTS</span><strong id="metricUpcoming">0</strong><small>Published & scheduled</small></article></div>
+        <div class="dashboard-columns"><section class="admin-panel"><div class="panel-heading"><div><span class="eyebrow">CONTENT SNAPSHOT</span><h3>Recent events</h3></div><button class="text-button" data-go="events">Manage all ↗</button></div><div id="recentEvents" class="recent-list"><div class="loading-line">Loading…</div></div></section><section class="admin-panel"><div class="panel-heading"><div><span class="eyebrow">QUICK ACTIONS</span><h3>Make an update</h3></div></div><div class="quick-actions"><button data-action="event">＋ Add an event</button><button data-action="gallery">＋ Upload gallery image</button><button data-action="team">＋ Add team member</button><button data-action="sponsor">＋ Add sponsor</button><button data-go="settings">↗ Edit homepage content</button></div><div class="tip-box"><b>Before publishing</b><p>Check event dates, registration links, image rights, and spelling. Unpublished content stays hidden from the public website.</p></div></section></div>
+      </section>
+      <section class="page" id="page-events"><div class="page-intro"><div><p class="eyebrow">CONTENT / 01</p><h2>Events</h2><p class="muted">Create, schedule, feature, edit, or remove events.</p></div><button class="btn btn-primary" data-action="event">+ Add event</button></div><div class="collection-toolbar"><span id="eventsCount">0 EVENTS</span><select id="eventStatusFilter" aria-label="Filter events"><option value="all">All statuses</option><option value="upcoming">Upcoming</option><option value="past">Past</option><option value="draft">Drafts</option></select></div><div id="eventsCollection" class="collection-grid"></div></section>
+      <section class="page" id="page-gallery"><div class="page-intro"><div><p class="eyebrow">CONTENT / 02</p><h2>Gallery</h2><p class="muted">Upload event photos and choose which ones are visible.</p></div><button class="btn btn-primary" data-action="gallery">+ Upload image</button></div><div class="upload-note">IMAGE RULES · JPG, PNG, WEBP, GIF OR AVIF · MAXIMUM 8 MB PER IMAGE</div><div id="galleryCollection" class="collection-grid gallery-collection"></div></section>
+      <section class="page" id="page-team"><div class="page-intro"><div><p class="eyebrow">CONTENT / 03</p><h2>Team directory</h2><p class="muted">Manage the people and roles behind ITSA.</p></div><button class="btn btn-primary" data-action="team">+ Add member</button></div><div id="teamCollection" class="collection-grid"></div></section>
+      <section class="page" id="page-sponsors"><div class="page-intro"><div><p class="eyebrow">CONTENT / 04</p><h2>Sponsors</h2><p class="muted">Manage partner names, logos, links, and sponsor tiers.</p></div><button class="btn btn-primary" data-action="sponsor">+ Add sponsor</button></div><div id="sponsorsCollection" class="collection-grid"></div></section>
+      <section class="page" id="page-settings"><div class="page-intro"><div><p class="eyebrow">CONFIGURATION / 01</p><h2>Site settings</h2><p class="muted">Edit the public homepage, contact links, and headline statistics.</p></div></div>
+        <form id="settingsForm" class="settings-form">
+          <section class="admin-panel"><div class="panel-heading"><div><span class="eyebrow">HOMEPAGE</span><h3>Brand & introduction</h3></div></div><div class="form-grid"><label>Club name<input name="clubName" maxlength="100"></label><label>College / subtitle<input name="collegeName" maxlength="160"></label><label class="full">Hero eyebrow<input name="heroEyebrow" maxlength="160"></label><label class="full">Hero headline<input name="heroTitle" maxlength="120"></label><label class="full">Hero description<textarea name="heroDescription" rows="3" maxlength="1600"></textarea></label><label class="full">About ITSA<textarea name="about" rows="4" maxlength="1600"></textarea></label><label class="full">Aims / mission<textarea name="aims" rows="4" maxlength="1600"></textarea></label><label class="full">Hero info text<textarea name="info" rows="3" maxlength="1600"></textarea></label><label class="full">Areas of focus <small>One item per line</small><textarea name="focusAreas" rows="4"></textarea></label></div></section>
+          <section class="admin-panel"><div class="panel-heading"><div><span class="eyebrow">PUBLIC CONTACT</span><h3>Links & email</h3></div></div><div class="form-grid"><label>Email<input name="email" type="email"></label><label>Instagram URL<input name="instagram" type="url"></label><label class="full">LinkedIn URL<input name="linkedin" type="url"></label></div></section>
+          <section class="admin-panel"><div class="panel-heading"><div><span class="eyebrow">NUMBERS</span><h3>Homepage statistics</h3></div></div><div class="form-grid four"><label>Events hosted<input name="eventsHosted" type="number" min="0"></label><label>Students engaged<input name="studentsEngaged" type="number" min="0"></label><label>Years active<input name="yearsActive" type="number" min="0"></label><label>Industry speakers<input name="industrySpeakers" type="number" min="0"></label></div></section>
+          <button class="btn btn-primary" type="submit">Save site settings <span>↗</span></button><div class="form-message" id="settingsMessage" role="status"></div>
+        </form>
+        <section class="admin-panel password-panel"><div class="panel-heading"><div><span class="eyebrow">ACCOUNT SECURITY</span><h3>Change admin password</h3></div></div><form id="passwordForm" class="form-grid"><label>Current password<input name="currentPassword" type="password" required autocomplete="current-password"></label><label>New password<input name="newPassword" type="password" minlength="12" required autocomplete="new-password"></label><div class="full"><button class="btn btn-outline" type="submit">Update password</button><div class="form-message" id="passwordMessage" role="status"></div></div></form></section>
+      </section>
+      <footer class="admin-footer"><span>ITSA / PCCOER ADMIN CONSOLE</span><span>Changes are saved to the website server.</span></footer>
+    </main>
+  </div>
+
+  <div class="modal-backdrop" id="modalBackdrop" hidden><section class="edit-modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle"><header><div><span class="eyebrow" id="modalEyebrow">CONTENT EDITOR</span><h2 id="modalTitle">Add item</h2></div><button id="modalClose" class="modal-close" aria-label="Close">×</button></header><form id="editorForm"><div id="editorFields" class="editor-fields"></div><div class="modal-actions"><button type="button" class="btn btn-quiet" id="modalCancel">Cancel</button><button type="submit" class="btn btn-primary" id="modalSave">Save changes <span>↗</span></button></div><div class="form-message" id="editorMessage" role="status"></div></form></section></div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
