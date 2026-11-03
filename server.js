@@ -1,11 +1,12 @@
 require('dotenv').config();
+require('express-async-errors');
 const express = require('express');
 const session = require('express-session');
 const helmet = require('helmet');
 const multer = require('multer');
 const bcrypt = require('bcryptjs');
 const rateLimit = require('express-rate-limit');
-const fs = require('fs');
+const { createClient } = require('@supabase/supabase-js');
 const path = require('path');
 const crypto = require('crypto');
 
@@ -13,14 +14,17 @@ const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 const ROOT = __dirname;
 const PUBLIC_DIR = path.join(ROOT, 'public');
-const DATA_DIR = path.join(ROOT, 'data');
-const UPLOAD_DIR = path.join(ROOT, 'uploads');
-const DB_FILE = path.join(DATA_DIR, 'db.json');
-const SETUP_KEY_FILE = path.join(DATA_DIR, 'setup-key.txt');
-const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(48).toString('hex');
+const SESSION_SECRET = process.env.SESSION_SECRET;
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_SECRET_KEY = process.env.SUPABASE_SECRET_KEY;
+const ADMIN_SETUP_KEY = process.env.ADMIN_SETUP_KEY;
 
-for (const dir of [DATA_DIR, UPLOAD_DIR]) fs.mkdirSync(dir, { recursive: true });
-if (!process.env.SESSION_SECRET) console.warn('SESSION_SECRET is not set. A temporary secret is being used; set one in .env for stable sessions.');
+if (!SESSION_SECRET || !SUPABASE_URL || !SUPABASE_SECRET_KEY || !ADMIN_SETUP_KEY) {
+  throw new Error('Missing required environment variables: SESSION_SECRET, SUPABASE_URL, SUPABASE_SECRET_KEY, ADMIN_SETUP_KEY');
+}
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_SECRET_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
+const STORAGE_BUCKET = 'itsa-uploads';
 
 const now = () => new Date().toISOString();
 const makeId = () => crypto.randomUUID();
@@ -48,68 +52,104 @@ const defaults = () => ({
   gallery: [], team: [], sponsors: [], admins: []
 });
 
-function readDb() {
-  try {
-    if (!fs.existsSync(DB_FILE)) {
-      const initial = defaults();
-      writeDb(initial);
-      return initial;
-    }
-    const parsed = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
-    return { ...defaults(), ...parsed };
-  } catch (error) {
-    console.error('Could not read data/db.json:', error.message);
-    throw new Error('The website data file could not be read. Restore data/db.json from a backup or remove a corrupted file to reseed it.');
+async function readDb() {
+  const { data, error } = await supabase
+    .from('itsa_site_data')
+    .select('data')
+    .eq('id', 'main')
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) {
+    const initial = defaults();
+    const { error: insertError } = await supabase
+      .from('itsa_site_data')
+      .insert({ id: 'main', data: initial, updated_at: now() });
+    if (insertError && insertError.code !== '23505') throw insertError;
+    if (insertError?.code === '23505') return readDb();
+    return initial;
   }
+  return { ...defaults(), ...data.data };
 }
-function writeDb(db) {
-  const tmp = `${DB_FILE}.${process.pid}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(db, null, 2), { mode: 0o600 });
-  fs.renameSync(tmp, DB_FILE);
-}
-let db = readDb();
 
-function ensureSetupKey() {
-  if (db.admins.length) return;
-  if (!fs.existsSync(SETUP_KEY_FILE)) {
-    const key = crypto.randomBytes(24).toString('base64url');
-    fs.writeFileSync(SETUP_KEY_FILE, key, { mode: 0o600 });
-  }
-  const key = fs.readFileSync(SETUP_KEY_FILE, 'utf8');
-  console.log('\n====================================================');
-  console.log('ITSA FIRST-ADMIN SETUP KEY (keep private):');
-  console.log(key);
-  console.log('Open /admin and use this key to create your admin.');
-  console.log('====================================================\n');
+async function writeDb(nextDb) {
+  const { error } = await supabase
+    .from('itsa_site_data')
+    .upsert({ id: 'main', data: nextDb, updated_at: now() }, { onConflict: 'id' });
+  if (error) throw error;
 }
-ensureSetupKey();
+
+let db = defaults();
+
+class SupabaseSessionStore extends session.Store {
+  get(sid, callback) {
+    supabase.from('itsa_sessions').select('data, expires_at').eq('id', sid).maybeSingle()
+      .then(({ data, error }) => {
+        if (error) return callback(error);
+        if (!data) return callback(null, null);
+        if (new Date(data.expires_at).getTime() <= Date.now()) {
+          this.destroy(sid, () => callback(null, null));
+          return;
+        }
+        callback(null, data.data);
+      }).catch(callback);
+  }
+  set(sid, sess, callback = () => {}) {
+    const expires = sess.cookie?.expires ? new Date(sess.cookie.expires) : new Date(Date.now() + 8 * 60 * 60 * 1000);
+    supabase.from('itsa_sessions').upsert({ id: sid, data: sess, expires_at: expires.toISOString() }, { onConflict: 'id' })
+      .then(({ error }) => callback(error || undefined)).catch(callback);
+  }
+  touch(sid, sess, callback = () => {}) { this.set(sid, sess, callback); }
+  destroy(sid, callback = () => {}) {
+    supabase.from('itsa_sessions').delete().eq('id', sid)
+      .then(({ error }) => callback(error || undefined)).catch(callback);
+  }
+}
+
+function uploadImageToSupabase(req, res, next) {
+  if (!req.file) return next();
+  const ext = (path.extname(req.file.originalname || '').toLowerCase() || '.img').replace(/[^.a-z0-9]/g, '');
+  const objectPath = `${Date.now()}-${crypto.randomBytes(10).toString('hex')}${ext}`;
+  supabase.storage.from(STORAGE_BUCKET).upload(objectPath, req.file.buffer, {
+    contentType: req.file.mimetype,
+    cacheControl: '3600',
+    upsert: false
+  }).then(({ error }) => {
+    if (error) return next(error);
+    const { data } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(objectPath);
+    req.file.publicUrl = data.publicUrl;
+    req.file.storagePath = objectPath;
+    next();
+  }).catch(next);
+}
+
+async function removeUploaded(url) {
+  if (typeof url !== 'string' || !url.includes(`/storage/v1/object/public/${STORAGE_BUCKET}/`)) return;
+  const objectPath = decodeURIComponent(url.split(`/storage/v1/object/public/${STORAGE_BUCKET}/`)[1].split('?')[0]);
+  if (objectPath) {
+    const { error } = await supabase.storage.from(STORAGE_BUCKET).remove([objectPath]);
+    if (error) console.error('Could not remove stored image:', error.message);
+  }
+}
 
 app.disable('x-powered-by');
 app.set('trust proxy', process.env.NODE_ENV === 'production' ? 1 : false);
 app.use(helmet({ contentSecurityPolicy: { directives: {
   defaultSrc: ["'self'"], scriptSrc: ["'self'", 'https://cdn.jsdelivr.net'], styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'], fontSrc: ["'self'", 'https://fonts.gstatic.com'],
-  imgSrc: ["'self'", 'data:', 'blob:'], mediaSrc: ["'self'", 'blob:', 'https:'], connectSrc: ["'self'"],
+  imgSrc: ["'self'", 'data:', 'blob:', 'https:'], mediaSrc: ["'self'", 'blob:', 'https:'], connectSrc: ["'self'"],
   objectSrc: ["'none'"], frameAncestors: ["'none'"], upgradeInsecureRequests: null
 } }, crossOriginEmbedderPolicy: false }));
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: false, limit: '1mb' }));
 app.use(session({
-  name: 'itsa.sid', secret: SESSION_SECRET, resave: false, saveUninitialized: false,
+  name: 'itsa.sid', store: new SupabaseSessionStore(), secret: SESSION_SECRET, resave: false, saveUninitialized: false,
   cookie: { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', maxAge: 8 * 60 * 60 * 1000 }
 }));
-app.use('/uploads', express.static(UPLOAD_DIR, { fallthrough: false, maxAge: '7d', immutable: false }));
-app.use(express.static(PUBLIC_DIR, { extensions: ['html'], maxAge: process.env.NODE_ENV === 'production' ? '1h' : 0 }));
+// Vercel serves files in /public through its CDN. Keep this middleware for local development.
+if (!process.env.VERCEL) app.use(express.static(PUBLIC_DIR, { extensions: ['html'], maxAge: 0 }));
 
 const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: 'draft-7', legacyHeaders: false, message: { error: 'Too many login attempts. Try again in 15 minutes.' } });
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname || '').toLowerCase();
-    cb(null, `${Date.now()}-${crypto.randomBytes(8).toString('hex')}${ext}`);
-  }
-});
 const imageUpload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 8 * 1024 * 1024, files: 1 },
   fileFilter: (_req, file, cb) => {
     const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif'];
@@ -134,7 +174,10 @@ function sameOrigin(req, res, next) {
   } catch { return res.status(403).json({ error: 'Invalid request origin.' }); }
   next();
 }
-app.use('/api', sameOrigin);
+app.use('/api', sameOrigin, async (_req, res, next) => {
+  try { db = await readDb(); next(); }
+  catch (error) { console.error('Supabase database read failed:', error); res.status(500).json({ error: 'Could not load website data.' }); }
+});
 
 function safeRecord(record, fields) {
   const result = {};
@@ -145,12 +188,6 @@ function safeRecord(record, fields) {
     else result[field] = clean(record[field], limit);
   }
   return result;
-}
-function removeUploaded(url) {
-  if (typeof url !== 'string' || !url.startsWith('/uploads/')) return;
-  const filename = path.basename(url);
-  const target = path.join(UPLOAD_DIR, filename);
-  if (path.dirname(target) === UPLOAD_DIR && fs.existsSync(target)) fs.unlinkSync(target);
 }
 function publicData() {
   return {
@@ -164,18 +201,17 @@ function publicData() {
 
 app.get('/api/health', (_req, res) => res.json({ ok: true, service: 'ITSA website' }));
 app.get('/api/public', (_req, res) => res.json(publicData()));
-app.get('/api/setup/status', (_req, res) => res.json({ needsSetup: db.admins.length === 0 && fs.existsSync(SETUP_KEY_FILE) }));
+app.get('/api/setup/status', (_req, res) => res.json({ needsSetup: db.admins.length === 0 }));
 app.post('/api/setup', loginLimiter, async (req, res) => {
   if (db.admins.length) return res.status(409).json({ error: 'Admin setup has already been completed.' });
   const key = clean(req.body.setupKey, 200);
   const email = clean(req.body.email, 160).toLowerCase();
   const password = String(req.body.password || '');
-  if (!fs.existsSync(SETUP_KEY_FILE) || key !== fs.readFileSync(SETUP_KEY_FILE, 'utf8')) return res.status(403).json({ error: 'The setup key is incorrect.' });
+  if (!ADMIN_SETUP_KEY || key !== ADMIN_SETUP_KEY) return res.status(403).json({ error: 'The setup key is incorrect.' });
   if (!/^\S+@\S+\.\S+$/.test(email)) return res.status(400).json({ error: 'Enter a valid email address.' });
   if (password.length < 12) return res.status(400).json({ error: 'Use a password with at least 12 characters.' });
   const admin = { id: makeId(), email, passwordHash: await bcrypt.hash(password, 12), createdAt: now() };
-  db.admins.push(admin); writeDb(db);
-  fs.unlinkSync(SETUP_KEY_FILE);
+  db.admins.push(admin); await writeDb(db);
   req.session.adminId = admin.id;
   res.json({ ok: true, email: admin.email });
 });
@@ -208,100 +244,100 @@ function eventInputFields(body) {
   }
   return fields;
 }
-app.post('/api/admin/events', requireAdmin, imageUpload.single('image'), (req, res) => {
+app.post('/api/admin/events', requireAdmin, imageUpload.single('image'), uploadImageToSupabase, async (req, res) => {
   const fields = eventInputFields(req.body);
-  if (!fields.title) { if (req.file) fs.unlinkSync(req.file.path); return res.status(400).json({ error: 'Event title is required.' }); }
-  const item = { id: makeId(), ...fields, coverImage: req.file ? `/uploads/${req.file.filename}` : '', createdAt: now(), updatedAt: now() };
+  if (!fields.title) { if (req.file?.publicUrl) await removeUploaded(req.file.publicUrl); return res.status(400).json({ error: 'Event title is required.' }); }
+  const item = { id: makeId(), ...fields, coverImage: req.file ? req.file.publicUrl : '', createdAt: now(), updatedAt: now() };
   if (item.featured) db.events.forEach(e => e.featured = false);
-  db.events.unshift(item); writeDb(db); res.status(201).json(item);
+  db.events.unshift(item); await writeDb(db); res.status(201).json(item);
 });
-app.put('/api/admin/events/:id', requireAdmin, imageUpload.single('image'), (req, res) => {
+app.put('/api/admin/events/:id', requireAdmin, imageUpload.single('image'), uploadImageToSupabase, async (req, res) => {
   const item = db.events.find(x => x.id === req.params.id);
-  if (!item) { if (req.file) fs.unlinkSync(req.file.path); return res.status(404).json({ error: 'Event not found.' }); }
+  if (!item) { if (req.file?.publicUrl) await removeUploaded(req.file.publicUrl); return res.status(404).json({ error: 'Event not found.' }); }
   const oldImage = item.coverImage;
   Object.assign(item, eventInputFields(req.body), { updatedAt: now() });
-  if (req.file) item.coverImage = `/uploads/${req.file.filename}`;
+  if (req.file) item.coverImage = req.file.publicUrl;
   else if (req.body.removeImage === 'true') item.coverImage = '';
   if (item.featured) db.events.forEach(e => { if (e.id !== item.id) e.featured = false; });
-  writeDb(db); if (oldImage && oldImage !== item.coverImage) removeUploaded(oldImage); res.json(item);
+  await writeDb(db); if (oldImage && oldImage !== item.coverImage) await removeUploaded(oldImage); res.json(item);
 });
-app.delete('/api/admin/events/:id', requireAdmin, (req, res) => {
+app.delete('/api/admin/events/:id', requireAdmin, async (req, res) => {
   const index = db.events.findIndex(x => x.id === req.params.id);
   if (index < 0) return res.status(404).json({ error: 'Event not found.' });
-  const [item] = db.events.splice(index, 1); removeUploaded(item.coverImage); writeDb(db); res.json({ ok: true });
+  const [item] = db.events.splice(index, 1); await removeUploaded(item.coverImage); await writeDb(db); res.json({ ok: true });
 });
 
 // GALLERY
-app.post('/api/admin/gallery', requireAdmin, imageUpload.single('image'), (req, res) => {
+app.post('/api/admin/gallery', requireAdmin, imageUpload.single('image'), uploadImageToSupabase, async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Choose an image to upload.' });
-  const item = { id: makeId(), title: clean(req.body.title, 120) || 'ITSA moment', category: clean(req.body.category, 50) || 'Event', caption: clean(req.body.caption, 300), image: `/uploads/${req.file.filename}`, published: req.body.published !== 'false', createdAt: now() };
-  db.gallery.unshift(item); writeDb(db); res.status(201).json(item);
+  const item = { id: makeId(), title: clean(req.body.title, 120) || 'ITSA moment', category: clean(req.body.category, 50) || 'Event', caption: clean(req.body.caption, 300), image: req.file.publicUrl, published: req.body.published !== 'false', createdAt: now() };
+  db.gallery.unshift(item); await writeDb(db); res.status(201).json(item);
 });
-app.put('/api/admin/gallery/:id', requireAdmin, imageUpload.single('image'), (req, res) => {
+app.put('/api/admin/gallery/:id', requireAdmin, imageUpload.single('image'), uploadImageToSupabase, async (req, res) => {
   const item = db.gallery.find(x => x.id === req.params.id);
-  if (!item) { if (req.file) fs.unlinkSync(req.file.path); return res.status(404).json({ error: 'Gallery image not found.' }); }
+  if (!item) { if (req.file?.publicUrl) await removeUploaded(req.file.publicUrl); return res.status(404).json({ error: 'Gallery image not found.' }); }
   const old = item.image;
   item.title = clean(req.body.title, 120) || item.title;
   item.category = clean(req.body.category, 50) || item.category;
   item.caption = clean(req.body.caption, 300);
   if (req.body.published !== undefined) item.published = req.body.published === 'true';
-  if (req.file) item.image = `/uploads/${req.file.filename}`;
-  writeDb(db); if (req.file) removeUploaded(old); res.json(item);
+  if (req.file) item.image = req.file.publicUrl;
+  await writeDb(db); if (req.file) await removeUploaded(old); res.json(item);
 });
-app.delete('/api/admin/gallery/:id', requireAdmin, (req, res) => {
+app.delete('/api/admin/gallery/:id', requireAdmin, async (req, res) => {
   const i = db.gallery.findIndex(x => x.id === req.params.id);
   if (i < 0) return res.status(404).json({ error: 'Image not found.' });
-  const [item] = db.gallery.splice(i, 1); removeUploaded(item.image); writeDb(db); res.json({ ok: true });
+  const [item] = db.gallery.splice(i, 1); await removeUploaded(item.image); await writeDb(db); res.json({ ok: true });
 });
 
 // TEAM
 const teamFields = { name: 100, role: 100, department: 80, bio: 500, linkedin: 500, instagram: 500, order: 10, published: 5 };
-app.post('/api/admin/team', requireAdmin, imageUpload.single('image'), (req, res) => {
+app.post('/api/admin/team', requireAdmin, imageUpload.single('image'), uploadImageToSupabase, async (req, res) => {
   const fields = safeRecord(req.body, teamFields);
-  if (!fields.name || !fields.role) { if (req.file) fs.unlinkSync(req.file.path); return res.status(400).json({ error: 'Name and role are required.' }); }
-  const item = { id: makeId(), ...fields, photo: req.file ? `/uploads/${req.file.filename}` : '', createdAt: now() };
-  db.team.push(item); writeDb(db); res.status(201).json(item);
+  if (!fields.name || !fields.role) { if (req.file?.publicUrl) await removeUploaded(req.file.publicUrl); return res.status(400).json({ error: 'Name and role are required.' }); }
+  const item = { id: makeId(), ...fields, photo: req.file ? req.file.publicUrl : '', createdAt: now() };
+  db.team.push(item); await writeDb(db); res.status(201).json(item);
 });
-app.put('/api/admin/team/:id', requireAdmin, imageUpload.single('image'), (req, res) => {
+app.put('/api/admin/team/:id', requireAdmin, imageUpload.single('image'), uploadImageToSupabase, async (req, res) => {
   const item = db.team.find(x => x.id === req.params.id);
-  if (!item) { if (req.file) fs.unlinkSync(req.file.path); return res.status(404).json({ error: 'Team member not found.' }); }
+  if (!item) { if (req.file?.publicUrl) await removeUploaded(req.file.publicUrl); return res.status(404).json({ error: 'Team member not found.' }); }
   const old = item.photo; Object.assign(item, safeRecord(req.body, teamFields));
-  if (req.file) item.photo = `/uploads/${req.file.filename}`;
+  if (req.file) item.photo = req.file.publicUrl;
   else if (req.body.removeImage === 'true') item.photo = '';
-  writeDb(db); if (old && old !== item.photo) removeUploaded(old); res.json(item);
+  await writeDb(db); if (old && old !== item.photo) await removeUploaded(old); res.json(item);
 });
-app.delete('/api/admin/team/:id', requireAdmin, (req, res) => {
+app.delete('/api/admin/team/:id', requireAdmin, async (req, res) => {
   const i = db.team.findIndex(x => x.id === req.params.id);
   if (i < 0) return res.status(404).json({ error: 'Team member not found.' });
-  const [item] = db.team.splice(i, 1); removeUploaded(item.photo); writeDb(db); res.json({ ok: true });
+  const [item] = db.team.splice(i, 1); await removeUploaded(item.photo); await writeDb(db); res.json({ ok: true });
 });
 
 // SPONSORS
-app.post('/api/admin/sponsors', requireAdmin, imageUpload.single('image'), (req, res) => {
+app.post('/api/admin/sponsors', requireAdmin, imageUpload.single('image'), uploadImageToSupabase, async (req, res) => {
   const name = clean(req.body.name, 120); const tier = ['Title','Gold','Silver'].includes(req.body.tier) ? req.body.tier : 'Silver';
-  if (!name) { if (req.file) fs.unlinkSync(req.file.path); return res.status(400).json({ error: 'Sponsor name is required.' }); }
-  const item = { id: makeId(), name, tier, website: clean(req.body.website, 500), description: clean(req.body.description, 300), logo: req.file ? `/uploads/${req.file.filename}` : '', published: req.body.published !== 'false', createdAt: now() };
-  db.sponsors.push(item); writeDb(db); res.status(201).json(item);
+  if (!name) { if (req.file?.publicUrl) await removeUploaded(req.file.publicUrl); return res.status(400).json({ error: 'Sponsor name is required.' }); }
+  const item = { id: makeId(), name, tier, website: clean(req.body.website, 500), description: clean(req.body.description, 300), logo: req.file ? req.file.publicUrl : '', published: req.body.published !== 'false', createdAt: now() };
+  db.sponsors.push(item); await writeDb(db); res.status(201).json(item);
 });
-app.put('/api/admin/sponsors/:id', requireAdmin, imageUpload.single('image'), (req, res) => {
+app.put('/api/admin/sponsors/:id', requireAdmin, imageUpload.single('image'), uploadImageToSupabase, async (req, res) => {
   const item = db.sponsors.find(x => x.id === req.params.id);
-  if (!item) { if (req.file) fs.unlinkSync(req.file.path); return res.status(404).json({ error: 'Sponsor not found.' }); }
+  if (!item) { if (req.file?.publicUrl) await removeUploaded(req.file.publicUrl); return res.status(404).json({ error: 'Sponsor not found.' }); }
   const old = item.logo; item.name = clean(req.body.name, 120) || item.name;
   item.tier = ['Title','Gold','Silver'].includes(req.body.tier) ? req.body.tier : item.tier;
   item.website = clean(req.body.website, 500); item.description = clean(req.body.description, 300);
   if (req.body.published !== undefined) item.published = req.body.published === 'true';
-  if (req.file) item.logo = `/uploads/${req.file.filename}`;
+  if (req.file) item.logo = req.file.publicUrl;
   else if (req.body.removeImage === 'true') item.logo = '';
-  writeDb(db); if (old && old !== item.logo) removeUploaded(old); res.json(item);
+  await writeDb(db); if (old && old !== item.logo) await removeUploaded(old); res.json(item);
 });
-app.delete('/api/admin/sponsors/:id', requireAdmin, (req, res) => {
+app.delete('/api/admin/sponsors/:id', requireAdmin, async (req, res) => {
   const i = db.sponsors.findIndex(x => x.id === req.params.id);
   if (i < 0) return res.status(404).json({ error: 'Sponsor not found.' });
-  const [item] = db.sponsors.splice(i, 1); removeUploaded(item.logo); writeDb(db); res.json({ ok: true });
+  const [item] = db.sponsors.splice(i, 1); await removeUploaded(item.logo); await writeDb(db); res.json({ ok: true });
 });
 
 // SETTINGS + PASSWORD
-app.put('/api/admin/settings', requireAdmin, (req, res) => {
+app.put('/api/admin/settings', requireAdmin, async (req, res) => {
   const input = req.body || {};
   const s = db.settings;
   for (const key of ['clubName','collegeName','email','instagram','linkedin','about','aims','heroEyebrow','heroTitle','heroDescription','info']) {
@@ -313,17 +349,17 @@ app.put('/api/admin/settings', requireAdmin, (req, res) => {
       if (input.stats[key] !== undefined) s.stats[key] = Math.max(0, Math.min(100000, Number.parseInt(input.stats[key], 10) || 0));
     }
   }
-  writeDb(db); res.json(s);
+  await writeDb(db); res.json(s);
 });
 app.put('/api/admin/password', requireAdmin, async (req, res) => {
   const current = String(req.body.currentPassword || ''); const next = String(req.body.newPassword || '');
   if (!(await bcrypt.compare(current, req.admin.passwordHash))) return res.status(400).json({ error: 'Current password is incorrect.' });
   if (next.length < 12) return res.status(400).json({ error: 'New password must be at least 12 characters.' });
-  req.admin.passwordHash = await bcrypt.hash(next, 12); writeDb(db); res.json({ ok: true });
+  req.admin.passwordHash = await bcrypt.hash(next, 12); await writeDb(db); res.json({ ok: true });
 });
 
-app.get('/admin', (_req, res) => res.sendFile(path.join(PUBLIC_DIR, 'admin', 'index.html')));
-app.get('/admin/', (_req, res) => res.sendFile(path.join(PUBLIC_DIR, 'admin', 'index.html')));
+app.get('/admin', (_req, res) => res.redirect(302, '/admin/index.html'));
+app.get('/admin/', (_req, res) => res.redirect(302, '/admin/index.html'));
 app.get('*', (req, res, next) => {
   if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'API route not found.' });
   next();
@@ -335,4 +371,6 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ error: 'Something went wrong on the server. Check the terminal for details.' });
 });
 
-app.listen(PORT, () => console.log(`ITSA website running at http://localhost:${PORT}\nPublic site: http://localhost:${PORT}\nAdmin panel: http://localhost:${PORT}/admin`));
+if (require.main === module) app.listen(PORT, () => console.log(`ITSA website running at http://localhost:${PORT}\nPublic site: http://localhost:${PORT}\nAdmin panel: http://localhost:${PORT}/admin`));
+
+module.exports = app;
