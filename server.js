@@ -145,7 +145,7 @@ app.use(session({
   cookie: { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', maxAge: 8 * 60 * 60 * 1000 }
 }));
 // Vercel serves files in /public through its CDN. Keep this middleware for local development.
-if (!process.env.VERCEL) app.use(express.static(PUBLIC_DIR, { extensions: ['html'], maxAge: 0 }));
+app.use(express.static(PUBLIC_DIR, { extensions: ['html'], maxAge: 0 }));
 
 const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: 'draft-7', legacyHeaders: false, message: { error: 'Too many login attempts. Try again in 15 minutes.' } });
 const imageUpload = multer({
